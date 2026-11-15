@@ -1,0 +1,10 @@
+[project]
+name = "tp2-biblioteca"
+version = "1.0.0"
+description = "TP2: Sistema de Biblioteca con FastAPI y SQLModel"
+readme = "README.md"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

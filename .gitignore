@@ -1,0 +1,23 @@
+# Entornos virtuales
+.venv/
+venv/
+env/
+
+# Caché de Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Testing y cobertura
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Base de datos SQLite local
+*.db
+*.sqlite3
+
+# Herramientas e IDEs
+.ruff_cache/
+.vscode/
+.idea/
