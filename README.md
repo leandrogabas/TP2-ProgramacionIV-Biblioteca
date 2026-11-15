@@ -37,8 +37,8 @@ El proyecto implementa una arquitectura en capas con separación estricta de res
 1. Clonar el repositorio y ubicarse en el directorio del proyecto:
 
 ```bash
-git clone https://github.com/ffumaneri/utn-tup-2026-python.git
-cd TP2-Prog-IV-biblioteca
+git clone https://github.com/leandrogabas/TP2-ProgramacionIV-Biblioteca.git
+cd TP2-ProgramacionIV-Biblioteca
 ```
 
 2. Crear y activar un entorno virtual:
