@@ -4,7 +4,7 @@ API RESTful construida con **FastAPI** y **SQLModel** para la gestión del catá
 
 ## Arquitectura del Proyecto
 
-El proyecto implementa una arquitectura en capas con separación estricta de responsabilidades e Inyección de Dependencias (`Depends`):
+El proyecto implementa una arquitectura en capas con separación estricta de responsabilidades (Presentación / Negocio / Persistencia / Modelo) e Inyección de Dependencias (`Depends`):
 
 - **`database.py`**: Configuración del `engine` SQLite, creación de tablas y generador de sesión (`get_session`).
 - **`main.py`**: Punto de entrada de la aplicación FastAPI, ciclo de vida (`lifespan`) y registro de routers.
@@ -14,18 +14,24 @@ El proyecto implementa una arquitectura en capas con separación estricta de res
   - `models/libro.py`: Modelo `Libro` y esquema `LibroRead` con autores anidados.
   - `models/socio.py`: Modelo `Socio` con validación de email único.
   - `models/prestamo.py`: Modelo `Prestamo` con control de fechas de vencimiento, devolución y multas.
-- **`routers/`**: Capa de presentación y controladores HTTP (sin lógica de negocio).
+- **`repositories/`**: Capa de acceso a datos (Data Access Layer). Concentra exclusivamente todas las consultas y operaciones de persistencia sobre `Session` (`select`, `get`, `add`, `flush`, `commit`, `delete`).
+  - `repositories/__init__.py`
+  - `repositories/autor_repository.py`: `AutorRepository` (CRUD de autores).
+  - `repositories/libro_repository.py`: `LibroRepository` (CRUD de libros, búsqueda por ISBN, filtro de stock disponible y vínculo en `LibroAutor`).
+  - `repositories/socio_repository.py`: `SocioRepository` (CRUD de socios y búsqueda por email).
+  - `repositories/prestamo_repository.py`: `PrestamoRepository` (persistencia de préstamos, filtrado y conteo de préstamos activos por socio, y confirmación transaccional atómica).
+- **`services/`**: Capa de lógica de negocio y validaciones de dominio. Orquesta los repositorios sin contener sentencias SQL ni consultas directas a SQLModel.
+  - `services/__init__.py`
+  - `services/autores.py`: `AutorService`.
+  - `services/libros.py`: `LibroService` (regla de unicidad de ISBN y validación de asociación N-N).
+  - `services/socios.py`: `SocioService` (regla de unicidad de email).
+  - `services/prestamos.py`: `PrestamoService` (reglas de socio activo, límite de 3 préstamos activos, descuento/reposición de stock, cálculo de vencimiento a 14 días y cálculo de multas).
+- **`routers/`**: Capa de presentación y controladores HTTP (recibe peticiones, delega en `services/` y retorna códigos de estado HTTP).
   - `routers/__init__.py`
   - `routers/autores.py`: Endpoints CRUD para `/autores`.
   - `routers/libros.py`: Endpoints CRUD para `/libros`, asociación N-N (`/libros/{id}/autores/{autor_id}`) y filtro `?disponibles=true`.
   - `routers/socios.py`: Endpoints CRUD para `/socios` y consulta de préstamos por socio (`/socios/{id}/prestamos?activos=true`).
   - `routers/prestamos.py`: Endpoints transaccionales para registrar préstamos (`/prestamos`) y devoluciones (`/prestamos/{id}/devolucion`).
-- **`services/`**: Capa de lógica de negocio, validaciones de dominio y transacciones atómicas.
-  - `services/__init__.py`
-  - `services/autores.py`: Servicio `AutorService`.
-  - `services/libros.py`: Servicio `LibroService` (unicidad de ISBN, filtro de stock y asociación de autores).
-  - `services/socios.py`: Servicio `SocioService` (unicidad de email y gestión de socios).
-  - `services/prestamos.py`: Servicio `PrestamoService` (reglas de préstamos activos, control de stock, plazos de 14 días y cálculo de multas).
 - **`tests/`**: Suite de pruebas de integración con Pytest y SQLite en memoria (`StaticPool`).
   - `tests/__init__.py`
   - `tests/conftest.py`: Fixtures de base de datos aislada en memoria (`session`) y cliente de pruebas (`client`).

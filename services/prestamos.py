@@ -3,12 +3,11 @@ from datetime import date, timedelta
 from typing import Annotated
 
 from fastapi import Depends, HTTPException
-from sqlmodel import col, select
 
-from database import SessionDep
-from models.libro import Libro
 from models.prestamo import DevolucionRequest, Prestamo, PrestamoCreate
-from models.socio import Socio
+from repositories.libro_repository import LibroRepositoryDep
+from repositories.prestamo_repository import PrestamoRepositoryDep
+from repositories.socio_repository import SocioRepositoryDep
 
 MAX_PRESTAMOS_ACTIVOS = 3
 DIAS_PLAZO_PRESTAMO = 14
@@ -16,11 +15,18 @@ MULTA_POR_DIA_ATRASO = 100.0
 
 
 class PrestamoService:
-    def __init__(self, session: SessionDep):
-        self.session = session
+    def __init__(
+        self,
+        repo: PrestamoRepositoryDep,
+        socio_repo: SocioRepositoryDep,
+        libro_repo: LibroRepositoryDep,
+    ):
+        self.repo = repo
+        self.socio_repo = socio_repo
+        self.libro_repo = libro_repo
 
     def get_by_id(self, prestamo_id: int) -> Prestamo:
-        prestamo = self.session.get(Prestamo, prestamo_id)
+        prestamo = self.repo.get_by_id(prestamo_id)
         if not prestamo:
             raise HTTPException(
                 status_code=404, detail="Préstamo no encontrado"
@@ -30,25 +36,18 @@ class PrestamoService:
     def get_prestamos_socio(
         self, socio_id: int, activos: bool | None = None
     ) -> Sequence[Prestamo]:
-        socio = self.session.get(Socio, socio_id)
+        socio = self.socio_repo.get_by_id(socio_id)
         if not socio:
             raise HTTPException(status_code=404, detail="Socio no encontrado")
 
-        statement = select(Prestamo).where(col(Prestamo.socio_id) == socio_id)
-        if activos is True:
-            statement = statement.where(col(Prestamo.fecha_devolucion).is_(None))
-        elif activos is False:
-            statement = statement.where(
-                col(Prestamo.fecha_devolucion).is_not(None)
-            )
-        return self.session.exec(statement).all()
+        return self.repo.list_by_socio(socio_id=socio_id, activos=activos)
 
     def registrar_prestamo(self, data: PrestamoCreate) -> Prestamo:
-        socio = self.session.get(Socio, data.socio_id)
+        socio = self.socio_repo.get_by_id(data.socio_id)
         if not socio:
             raise HTTPException(status_code=404, detail="Socio no encontrado")
 
-        libro = self.session.get(Libro, data.libro_id)
+        libro = self.libro_repo.get_by_id(data.libro_id)
         if not libro:
             raise HTTPException(status_code=404, detail="Libro no encontrado")
 
@@ -58,8 +57,10 @@ class PrestamoService:
                 detail="El socio se encuentra inactivo y no puede solicitar préstamos",
             )
 
-        prestamos_activos = self.get_prestamos_socio(socio.id, activos=True)  # type: ignore[arg-type]
-        if len(prestamos_activos) >= MAX_PRESTAMOS_ACTIVOS:
+        if (
+            self.repo.count_activos_by_socio(data.socio_id)
+            >= MAX_PRESTAMOS_ACTIVOS
+        ):
             raise HTTPException(
                 status_code=409,
                 detail=f"El socio ya alcanzó el límite de {MAX_PRESTAMOS_ACTIVOS} préstamos activos",
@@ -84,11 +85,10 @@ class PrestamoService:
             multa=0.0,
         )
 
-        self.session.add(libro)
-        self.session.add(prestamo)
-        self.session.commit()
-        self.session.refresh(prestamo)
-        return prestamo
+        # Se preparan ambos cambios en la sesión compartida (flush) y se confirman atómicamente
+        self.libro_repo.update(libro, commit=False)
+        self.repo.create(prestamo, commit=False)
+        return self.repo.commit_and_refresh(prestamo)
 
     def registrar_devolucion(
         self, prestamo_id: int, req: DevolucionRequest | None = None
@@ -100,7 +100,7 @@ class PrestamoService:
                 status_code=409, detail="El préstamo ya fue devuelto"
             )
 
-        libro = self.session.get(Libro, prestamo.libro_id)
+        libro = self.libro_repo.get_by_id(prestamo.libro_id)
         if not libro:
             raise HTTPException(status_code=404, detail="Libro no encontrado")
 
@@ -119,11 +119,10 @@ class PrestamoService:
         prestamo.multa = multa
         libro.stock += 1
 
-        self.session.add(prestamo)
-        self.session.add(libro)
-        self.session.commit()
-        self.session.refresh(prestamo)
-        return prestamo
+        # Se preparan ambos cambios en la sesión compartida (flush) y se confirman atómicamente
+        self.libro_repo.update(libro, commit=False)
+        self.repo.update(prestamo, commit=False)
+        return self.repo.commit_and_refresh(prestamo)
 
 
 PrestamoServiceDep = Annotated[PrestamoService, Depends(PrestamoService)]

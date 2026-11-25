@@ -10,5 +10,5 @@ pythonpath = ["."]
 testpaths = ["tests"]
 
 [tool.coverage.run]
-source = ["models", "routers", "services", "tests", "database", "main"]
+source = ["models", "repositories", "routers", "services", "tests", "database", "main"]
 
